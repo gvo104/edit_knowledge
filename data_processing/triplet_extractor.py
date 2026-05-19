@@ -2,47 +2,48 @@
 Извлечение триплетов (субъект-предикат-объект) из выборки статей.
 """
 from collections import defaultdict
-from typing import List, Dict, Tuple, Set
+from typing import List, Dict, Set, Tuple
 
 Triplet = Tuple[str, str, str]
 
 
-def group_genes_by_pmid(records: List[Dict[str, str]]) -> Dict[str, List[str]]:
+def group_entities_by_pmid(records: List[Dict[str, str]]) -> Dict[str, List[str]]:
     """
-    Группирует уникальные имена генов по PMID.
-    Возвращает словарь {pmid: [gene1, gene2, ...]}
+    Группирует уникальные имена сущностей по PMID.
+    Возвращает словарь {pmid: [entity1, entity2, ...]}
     """
-    genes_by_pmid = defaultdict(list)
+    entities_by_pmid = defaultdict(list)
     for rec in records:
         pmid = rec['pmid']
-        gene = rec['gene_name']
-        if gene not in genes_by_pmid[pmid]:
-            genes_by_pmid[pmid].append(gene)
-    return dict(genes_by_pmid)
+        entity = rec['entity_name']
+        if entity not in entities_by_pmid[pmid]:
+            entities_by_pmid[pmid].append(entity)
+    return dict(entities_by_pmid)
 
 
-def build_triplets(genes_by_pmid: Dict[str, List[str]],
-                   max_cooccur_genes: int = 5) -> Set[Triplet]:
+def build_triplets(entities_by_pmid: Dict[str, List[str]],
+                   max_cooccur_entities: int = 5,
+                   predicate: str = "mentioned in",
+                   cooccur_predicate: str = "co-occurs with") -> Set[Triplet]:
     """
     По сгруппированным данным строит множество уникальных триплетов:
-        - (gene, "mentioned in", "PMID:...")
-        - (geneA, "co-occurs with", geneB) для первых max_cooccur_genes генов
+        - (entity, predicate, "PMID:...")
+        - (entityA, cooccur_predicate, entityB) для первых max_cooccur_entities сущностей
     """
     triplets: Set[Triplet] = set()
 
-    for pmid, genes in genes_by_pmid.items():
+    for pmid, entities in entities_by_pmid.items():
         pmid_tag = f"PMID:{pmid}"
-        # Упоминание гена в статье
-        for gene in genes:
-            triplets.add((gene, "mentioned in", pmid_tag))
+        # Упоминание сущности в статье
+        for entity in entities:
+            triplets.add((entity, predicate, pmid_tag))
 
-        # Ко-оккуренция генов внутри одной статьи
-        if len(genes) >= 2:
-            # Ограничиваем количество комбинаций, чтобы не плодить слишком много
-            top_genes = genes[:max_cooccur_genes]
-            for i in range(len(top_genes)):
-                for j in range(i + 1, len(top_genes)):
-                    triplets.add((top_genes[i], "co-occurs with", top_genes[j]))
+        # Ко-оккуренция сущностей внутри одной статьи
+        if len(entities) >= 2:
+            top_entities = entities[:max_cooccur_entities]
+            for i in range(len(top_entities)):
+                for j in range(i + 1, len(top_entities)):
+                    triplets.add((top_entities[i], cooccur_predicate, top_entities[j]))
 
     return triplets
 
@@ -58,9 +59,8 @@ def extract_sample(records, sample_size: int):
         pmid = rec['pmid']
         if pmid not in seen_pmids:
             if len(seen_pmids) >= sample_size:
-                # Мы уже набрали нужное число PMID, дальше не идём
                 break
             seen_pmids.add(pmid)
-        if pmid in seen_pmids:  # добавляем все записи для отобранных PMID
+        if pmid in seen_pmids:
             sample.append(rec)
     return sample

@@ -28,13 +28,11 @@ def parse_line(line: str) -> Optional[Dict[str, str]]:
     if len(parts) < 4:
         return None
     pmid = parts[0]
-    gene_id = parts[2]
-    gene_name = parts[3]
-    # Убираем возможный суффикс после '|'
-    if '|' in gene_name:
-        gene_name = gene_name.split('|', 1)[0]
-    return {'pmid': pmid, 'gene_id': gene_id, 'gene_name': gene_name}
-
+    entity_id = parts[2]
+    entity_name = parts[3]
+    if '|' in entity_name:
+        entity_name = entity_name.split('|', 1)[0]
+    return {'pmid': pmid, 'entity_id': entity_id, 'entity_name': entity_name}
 
 def iter_records(file_path: Path) -> Iterator[Dict[str, str]]:
     """
@@ -47,6 +45,6 @@ def iter_records(file_path: Path) -> Iterator[Dict[str, str]]:
 
     with open_func(actual_path, mode) as f:
         for line in f:
-            record = parse_line(line)
-            if record is not None:
-                yield record
+            rec = parse_line(line)
+            if rec:
+                yield rec
