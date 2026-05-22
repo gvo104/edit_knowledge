@@ -1,5 +1,5 @@
 """
-Основной цикл probing: пакетная обработка всех запросов.
+Основной цикл probing: пакетная обработка всех запросов (включая locality).
 """
 from typing import Dict, List, Any
 from llm.query_engine import get_model_answers_batch, evaluate_answer
@@ -11,13 +11,12 @@ def run_probing(test_queries: Dict[str, List[Dict[str, Any]]],
                 eval_strategy: str = "improved",
                 verbose: bool = True) -> Dict[str, List[Dict[str, Any]]]:
     """
-    Для каждого типа запросов собирает все вопросы,
-    получает ответы батчами, затем оценивает каждый ответ.
+    Принимает словарь с любыми категориями запросов.
+    Возвращает результаты для каждой категории.
     """
-    results = {"direct": [], "inverse": [], "paraphrase": []}
+    results = {}
 
-    for query_type in ["direct", "inverse", "paraphrase"]:
-        items = test_queries.get(query_type, [])
+    for query_type, items in test_queries.items():
         if not items:
             continue
 
@@ -35,9 +34,7 @@ def run_probing(test_queries: Dict[str, List[Dict[str, Any]]],
 
         print(f"  Генерация ответов (batch_size={batch_size})...")
         model_answers = get_model_answers_batch(
-            questions,
-            tokenizer,
-            model,
+            questions, tokenizer, model,
             max_new_tokens=max_new_tokens,
             batch_size=batch_size,
             do_sample=do_sample,
@@ -52,7 +49,7 @@ def run_probing(test_queries: Dict[str, List[Dict[str, Any]]],
             except Exception:
                 score = 0.0
             scores.append(score)
-            results[query_type].append({
+            results.setdefault(query_type, []).append({
                 "question": item['question'],
                 "expected": exp,
                 "model_answer": ans,

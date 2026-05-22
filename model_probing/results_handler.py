@@ -72,12 +72,11 @@ def save_results(results: Dict[str, List[Dict[str, Any]]],
 
 
 def print_sample_answers(results: Dict[str, List[Dict[str, Any]]], n: int = 3):
-    """Выводит примеры ответов модели для каждого типа."""
+    """Выводит примеры ответов модели для каждого типа запросов."""
     print("\n" + "=" * 60)
     print("ПРИМЕРЫ ОТВЕТОВ МОДЕЛИ:")
     print("=" * 60)
-    for qtype in ["direct", "inverse", "paraphrase"]:
-        items = results.get(qtype, [])
+    for qtype, items in results.items():
         if not items:
             continue
         print(f"\n{qtype.upper()} (первые {n} примеров):")

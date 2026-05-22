@@ -73,6 +73,11 @@ def main():
     for key in test_queries:
         print(f"    {key}: {len(test_queries[key])} шт.")
 
+    # 6.1 Генерация locality-запросов (общие знания)
+    from query_generator import generate_locality_queries
+    locality_queries = generate_locality_queries()
+    print(f"    locality: {len(locality_queries)} шт.")
+
     # 7. Сохранение результата с версией
     version = config.VERSION_TIMESTAMP
     output_filename = config.OUTPUT_FILENAME_TEMPLATE.format(
@@ -92,7 +97,8 @@ def main():
             "sample_size_limit": config.SAMPLE_SIZE
         },
         "triplets": unique_triplets,
-        "test_queries": test_queries
+        "test_queries": test_queries,
+        "locality_queries": locality_queries
     }
 
     print("\n>>> Сохранение результатов...")
