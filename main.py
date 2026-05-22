@@ -1,13 +1,14 @@
 """
 Главный скрипт проекта edit_knowledge.
-Поддерживает два режима:
-  1) Обычный (аргументы командной строки) – запуск обработки и/или probing для одного или всех датасетов.
-  2) Отладка по единой матрице (--debug) – словарь, где ключ = имя датасета, значение = параметры этапов.
+Режимы:
+  1) Обычный – аргументы командной строки.
+  2) --debug – работа по матрице экспериментов + сбор общего отчёта.
 """
 import sys
 import subprocess
 import argparse
 import glob
+import json
 from pathlib import Path
 
 # Определяем корень папки edit_knowledge (где лежит этот main.py)
@@ -37,13 +38,35 @@ import config
 # ══════════════════════════════════════════════════════════════
 DEBUG_MATRIX = {
     "gene": {
-        "processing": False,               # не пересоздаём триплеты
-        "choose_triplets": "latest",        # используем последнюю доступную версию
-        "probing": False,                   # не запускаем отдельный baseline probing
-        "train_lora": True,                 # запускаем обучение LoRA
-        "force_retrain": False,             # не переобучаем, если адаптер уже есть
-        "probe_after_train": True,          # после обучения автоматически запустить probing
-    }
+        "processing": True,
+        "choose_triplets": None,        # после процессинга берётся свежая версия
+        "probing": True,
+        "train_lora": True,
+        "force_processing": True,       # пересоздать триплеты
+        "force_probing": True,          # перезаписать baseline probing
+        "force_retrain": True,          # переобучить LoRA
+        "probe_after_train": True,
+    },
+    "disease": {
+        "processing": True,
+        "choose_triplets": None,
+        "probing": True,
+        "train_lora": True,
+        "force_processing": True,
+        "force_probing": True,
+        "force_retrain": True,
+        "probe_after_train": True,
+    },
+    "mutation": {
+        "processing": True,
+        "choose_triplets": None,
+        "probing": True,
+        "train_lora": True,
+        "force_processing": True,
+        "force_probing": True,
+        "force_retrain": True,
+        "probe_after_train": True,
+    },
 }
 
 
@@ -77,6 +100,43 @@ def _get_latest_version(dataset: str) -> str:
     return timestamp
 
 
+def collect_summary(datasets: list):
+    """
+    Собирает последние baseline- и LoRA-метрики по датасетам и сохраняет в data/summary.json.
+    """
+    summary_all = {}
+    for dataset in datasets:
+        # baseline
+        baseline_dir = Path(config.PROBING_DIR)
+        pattern_base = str(baseline_dir / f"*_{dataset}_*_probing_results.json")
+        base_files = sorted(glob.glob(pattern_base), reverse=True)
+        baseline_summary = None
+        if base_files:
+            with open(base_files[0], 'r', encoding='utf-8') as f:
+                baseline_data = json.load(f)
+            baseline_summary = baseline_data.get("summary")
+        
+        # lora
+        lora_dir = Path(config.PROBING_DIR_LORA)
+        pattern_lora = str(lora_dir / f"*_{dataset}_*_probing_results.json")
+        lora_files = sorted(glob.glob(pattern_lora), reverse=True)
+        lora_summary = None
+        if lora_files:
+            with open(lora_files[0], 'r', encoding='utf-8') as f:
+                lora_data = json.load(f)
+            lora_summary = lora_data.get("summary")
+        
+        summary_all[dataset] = {
+            "baseline": baseline_summary,
+            "lora": lora_summary
+        }
+    
+    output_path = Path(config.BASE_DIR) / "data" / "summary.json"
+    with open(output_path, 'w', encoding='utf-8') as f:
+        json.dump(summary_all, f, indent=2, ensure_ascii=False)
+    print(f"Общий отчёт сохранён: {output_path}")
+
+
 def run_debug_matrix():
     processing_script = EDIT_KNOWLEDGE_DIR / "data_processing" / "run_processing.py"
     probing_script = EDIT_KNOWLEDGE_DIR / "model_probing" / "run_probing.py"
@@ -87,6 +147,8 @@ def run_debug_matrix():
         print(f"# Эксперимент: датасет {dataset}")
         print(f"{'#'*60}")
 
+        used_version = None   # версия триплетов, которую будем передавать явно
+
         # ------------------------------------------------------------
         # Этап 1: processing (если True)
         # ------------------------------------------------------------
@@ -95,9 +157,8 @@ def run_debug_matrix():
             if params.get("force_processing"):
                 proc_args.append('--force')
             run_script(processing_script, f"1. Обработка данных (датасет {dataset})", proc_args)
-            # После успешного процессинга мы можем определить новую версию
-            # либо использовать свежесозданную автоматически при вызове следующих этапов
-            used_version = None   # следующие этапы сами найдут последнюю, если не указано
+            # После успешной обработки определяем только что созданную версию
+            used_version = _get_latest_version(dataset)
         else:
             # Процессинг пропущен – нужна явная версия
             chosen = params.get("choose_triplets")
@@ -115,7 +176,7 @@ def run_debug_matrix():
                 probe_args += ['--version', used_version]
             if params.get("force_probing"):
                 probe_args.append('--force')
-            run_script(probing_script, f"2. Knowledge Probing (датасет {dataset})", probe_args)
+            run_script(probing_script, f"2. Baseline probing (датасет {dataset})", probe_args)
 
         # ------------------------------------------------------------
         # Этап 3: train_lora (если True)
@@ -125,11 +186,14 @@ def run_debug_matrix():
             # Версия триплетов для обучения (если не было processing, нужно указать)
             if used_version:
                 train_args += ['--version', used_version]
-            if params.get("probe_after_train", True) == False:
+            if not params.get("probe_after_train", True):
                 train_args.append('--no_probe')
             if params.get("force_retrain"):
                 train_args.append('--force_retrain')
             run_script(training_script, f"3. LoRA обучение (датасет {dataset})", train_args)
+
+    # После всех экспериментов собираем общий отчёт
+    collect_summary(list(DEBUG_MATRIX.keys()))
 
 
 def main():
@@ -147,7 +211,7 @@ def main():
 
     if args.debug:
         print("=" * 60)
-        print("РЕЖИМ ОТЛАДКИ (DEBUG MATRIX)")
+        print("РЕЖИМ ОТЛАДКИ (DEBUG MATRIX) – ПОЛНЫЙ ЦИКЛ С ПЕРЕЗАПИСЬЮ")
         print("=" * 60)
         run_debug_matrix()
         print("\n" + "=" * 60)
