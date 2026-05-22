@@ -29,22 +29,17 @@ import config
 #                       или None (если processing=True, возьмётся свежая версия)
 #   probing           – True/False, запускать ли knowledge probing
 #   train_lora        – True/False, запускать ли обучение LoRA
-#   force_processing  – перезаписать файл триплетов (--force) [по умолчанию False]
-#   force_probing     – перезаписать результаты probing (--force) [по умолчанию False]
-#   force_retrain     – переобучить LoRA, даже если адаптер существует [по умолчанию False]
 #   probe_after_train – если False, не запускать probing сразу после обучения [по умолчанию True]
 #
-# Все пути и версии формируются автоматически в соответствии с единой логикой.
+# Все пути и версии формируются автоматически, перезапись не используется –
+# версионирование гарантирует сохранность всех результатов.
 # ══════════════════════════════════════════════════════════════
 DEBUG_MATRIX = {
     "gene": {
         "processing": True,
-        "choose_triplets": None,        # после процессинга берётся свежая версия
+        "choose_triplets": None,        # после процессинга возьмётся свежая версия
         "probing": True,
         "train_lora": True,
-        "force_processing": True,       # пересоздать триплеты
-        "force_probing": True,          # перезаписать baseline probing
-        "force_retrain": True,          # переобучить LoRA
         "probe_after_train": True,
     },
     "disease": {
@@ -52,9 +47,6 @@ DEBUG_MATRIX = {
         "choose_triplets": None,
         "probing": True,
         "train_lora": True,
-        "force_processing": True,
-        "force_probing": True,
-        "force_retrain": True,
         "probe_after_train": True,
     },
     "mutation": {
@@ -62,9 +54,6 @@ DEBUG_MATRIX = {
         "choose_triplets": None,
         "probing": True,
         "train_lora": True,
-        "force_processing": True,
-        "force_probing": True,
-        "force_retrain": True,
         "probe_after_train": True,
     },
 }
@@ -100,9 +89,58 @@ def _get_latest_version(dataset: str) -> str:
     return timestamp
 
 
+def print_summary_table(summary_all: dict):
+    """Выводит в консоль сводную таблицу сравнения baseline и LoRA."""
+    print("\n" + "=" * 80)
+    print(" ИТОГОВОЕ СРАВНЕНИЕ BASELINE vs LoRA")
+    print("=" * 80)
+
+    for dataset, data in summary_all.items():
+        print(f"\n--- {dataset.upper()} ---")
+        if data["baseline"] is None and data["lora"] is None:
+            print("  Нет данных")
+            continue
+
+        # Заголовок таблицы
+        header = f"{'Категория':<15} {'Метрика':<20} {'Baseline':<12} {'LoRA':<12} {'Δ'}"
+        print(header)
+        print("-" * len(header))
+
+        # Собираем все категории (direct, inverse, paraphrase, locality)
+        all_categories = set()
+        for key in ["baseline", "lora"]:
+            if data[key]:
+                all_categories.update(data[key].keys())
+        categories = sorted(all_categories)
+
+        for cat in categories:
+            base = data["baseline"].get(cat) if data["baseline"] else {}
+            lora = data["lora"].get(cat) if data["lora"] else {}
+
+            base_mean = base.get("mean_score", 0) if base else 0
+            lora_mean = lora.get("mean_score", 0) if lora else 0
+            diff_mean = lora_mean - base_mean
+
+            base_perfect = base.get("accuracy_1.0", 0) if base else 0
+            lora_perfect = lora.get("accuracy_1.0", 0) if lora else 0
+            diff_perfect = lora_perfect - base_perfect
+
+            base_good = base.get("good_enough_rate", 0) if base else 0
+            lora_good = lora.get("good_enough_rate", 0) if lora else 0
+            diff_good = lora_good - base_good
+
+            # Печатаем три строки для каждой категории
+            print(f"{cat:<15} {'mean_score':<20} {base_mean:<12.4f} {lora_mean:<12.4f} {diff_mean:+.4f}")
+            print(f"{'':<15} {'perfect (1.0)':<20} {base_perfect:<12.4f} {lora_perfect:<12.4f} {diff_perfect:+.4f}")
+            print(f"{'':<15} {'good (≥0.8)':<20} {base_good:<12.4f} {lora_good:<12.4f} {diff_good:+.4f}")
+
+    print("=" * 80)
+
+
 def collect_summary(datasets: list):
     """
-    Собирает последние baseline- и LoRA-метрики по датасетам и сохраняет в data/summary.json.
+    Собирает последние baseline- и LoRA-метрики по датасетам,
+    сохраняет в data/summary_YYYYMMDD_HHMMSS.json и выводит таблицу в консоль.
     """
     summary_all = {}
     for dataset in datasets:
@@ -131,10 +169,14 @@ def collect_summary(datasets: list):
             "lora": lora_summary
         }
     
-    output_path = Path(config.BASE_DIR) / "data" / "summary.json"
+    # Сохранение с датой
+    output_path = Path(config.BASE_DIR) / "data" / f"summary_{config.VERSION_TIMESTAMP}.json"
     with open(output_path, 'w', encoding='utf-8') as f:
         json.dump(summary_all, f, indent=2, ensure_ascii=False)
-    print(f"Общий отчёт сохранён: {output_path}")
+    print(f"\nОбщий отчёт сохранён: {output_path}")
+
+    # Вывод таблицы в консоль
+    print_summary_table(summary_all)
 
 
 def run_debug_matrix():
@@ -154,8 +196,6 @@ def run_debug_matrix():
         # ------------------------------------------------------------
         if params.get("processing"):
             proc_args = ['--dataset', dataset]
-            if params.get("force_processing"):
-                proc_args.append('--force')
             run_script(processing_script, f"1. Обработка данных (датасет {dataset})", proc_args)
             # После успешной обработки определяем только что созданную версию
             used_version = _get_latest_version(dataset)
@@ -174,8 +214,6 @@ def run_debug_matrix():
             probe_args = ['--dataset', dataset]
             if used_version:
                 probe_args += ['--version', used_version]
-            if params.get("force_probing"):
-                probe_args.append('--force')
             run_script(probing_script, f"2. Baseline probing (датасет {dataset})", probe_args)
 
         # ------------------------------------------------------------
@@ -183,13 +221,10 @@ def run_debug_matrix():
         # ------------------------------------------------------------
         if params.get("train_lora"):
             train_args = ['--dataset', dataset]
-            # Версия триплетов для обучения (если не было processing, нужно указать)
             if used_version:
                 train_args += ['--version', used_version]
             if not params.get("probe_after_train", True):
                 train_args.append('--no_probe')
-            if params.get("force_retrain"):
-                train_args.append('--force_retrain')
             run_script(training_script, f"3. LoRA обучение (датасет {dataset})", train_args)
 
     # После всех экспериментов собираем общий отчёт
@@ -211,7 +246,7 @@ def main():
 
     if args.debug:
         print("=" * 60)
-        print("РЕЖИМ ОТЛАДКИ (DEBUG MATRIX) – ПОЛНЫЙ ЦИКЛ С ПЕРЕЗАПИСЬЮ")
+        print("РЕЖИМ ОТЛАДКИ (DEBUG MATRIX) – ПОЛНЫЙ ЦИКЛ")
         print("=" * 60)
         run_debug_matrix()
         print("\n" + "=" * 60)
