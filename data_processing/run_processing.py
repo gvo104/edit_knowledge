@@ -26,6 +26,8 @@ def main():
     parser = argparse.ArgumentParser(description="Обработка PubTator датасета в триплеты")
     parser.add_argument('--dataset', type=str, default=config.DATASET_NAME,
                         help='Имя датасета: gene, disease, mutation')
+    parser.add_argument('--force', action='store_true',
+                        help='Перезаписать существующий выходной файл (если есть)')
     args = parser.parse_args()
     dataset_name = args.dataset
     ds_config = config.get_dataset_config(dataset_name)
@@ -84,6 +86,11 @@ def main():
         dataset=dataset_name, version=version
     )
     output_path = output_dir / output_filename
+
+    # Перезапись, если указан флаг --force
+    if args.force and output_path.exists():
+        output_path.unlink()
+        print(f"    Старый файл {output_path} удалён.")
 
     output = {
         "source": f"{dataset_name}2pubtatorcentral",

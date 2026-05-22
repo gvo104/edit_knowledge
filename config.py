@@ -78,6 +78,7 @@ GOOD_ENOUGH_THRESHOLD = 0.8
 # СОХРАНЕНИЕ РЕЗУЛЬТАТОВ PROBING
 # ========================
 PROBING_DIR = BASE_DIR / "data" / "probing_results"
+PROBING_DIR_LORA = BASE_DIR / "data" / "probing_results_lora"   # <-- новая папка
 PROBING_OUTPUT_FILENAME_TEMPLATE = "{model_short}_{dataset}_{version}_probing_results.json"
 
 # ========================

@@ -1,5 +1,6 @@
 """
 Запуск probing модели на сгенерированных триплетах.
+Поддерживает загрузку LoRA-адаптера через --lora_path.
 """
 import json
 import sys
@@ -22,6 +23,10 @@ def main():
                         help='Имя датасета: gene, disease, mutation')
     parser.add_argument('--version', type=str, default=None,
                         help='Версия файла триплетов (например, 20250120_143022). Если не указана, используется последняя.')
+    parser.add_argument('--force', action='store_true',
+                        help='Перезаписать существующие результаты probing')
+    parser.add_argument('--lora_path', type=str, default=None,
+                        help='Путь к адаптеру LoRA (если указан, модель загружается с ним)')
     args = parser.parse_args()
 
     dataset_name = args.dataset
@@ -40,11 +45,16 @@ def main():
     print("=" * 60)
     print(f"PROBING МОДЕЛИ: {config.MODEL_NAME} на датасете {dataset_name}")
     print(f"Файл триплетов: {triplets_file}")
+    if args.lora_path:
+        print(f"LoRA адаптер: {args.lora_path}")
     print("=" * 60)
 
     with open(triplets_file, 'r', encoding='utf-8') as f:
         data = json.load(f)
     test_queries = data['test_queries']
+    # Добавляем locality, если есть
+    if 'locality_queries' in data:
+        test_queries['locality'] = data['locality_queries']
     print(f"Загружено тестовых запросов: { {k: len(v) for k, v in test_queries.items()} }")
 
     tokenizer, model = load_model_and_tokenizer(
@@ -52,6 +62,12 @@ def main():
         torch_dtype=config.TORCH_DTYPE,
         device_map=config.DEVICE
     )
+
+    # Загрузка LoRA адаптера, если указан
+    if args.lora_path:
+        from peft import PeftModel
+        model = PeftModel.from_pretrained(model, args.lora_path)
+        print(f"LoRA адаптер загружен из {args.lora_path}")
 
     gen_kwargs = {
         "max_new_tokens": config.MAX_NEW_TOKENS,
@@ -78,6 +94,12 @@ def main():
         version=version
     )
     output_path = Path(config.PROBING_DIR) / output_filename
+
+    # Перезапись, если указан --force
+    if args.force and output_path.exists():
+        output_path.unlink()
+        print(f"Старый файл результатов удалён: {output_path}")
+
     save_results(results, summary, config.MODEL_NAME,
                  str(model.device), str(model.dtype), str(output_path))
     print("Готово.")
