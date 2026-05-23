@@ -5,7 +5,7 @@ from typing import Dict, List, Set, Tuple
 
 Triplet = Tuple[str, str, str]
 
-# Шаблоны вопросов. paraphrase – список вариантов для каждого типа сущности
+# Полные шаблоны (7 парафраз для каждого типа)
 TEMPLATES = {
     "gene": {
         "direct": "In which PubMed article is {entity} mentioned?",
@@ -14,7 +14,10 @@ TEMPLATES = {
             "What publication cites {entity}?",
             "Which paper mentions the gene {entity}?",
             "Give the PubMed ID of a study discussing {entity}.",
-            "In which article does {entity} appear?"
+            "In which article does {entity} appear?",
+            "What is the PubMed ID for the paper about {entity}?",
+            "Which scientific article reports on {entity}?",
+            "Provide the PMID of a study that examines {entity}.",
         ]
     },
     "disease": {
@@ -24,7 +27,10 @@ TEMPLATES = {
             "What publication discusses the disease {entity}?",
             "Which paper mentions the condition {entity}?",
             "Give the PubMed ID of a study about {entity}.",
-            "In which article does the disease {entity} appear?"
+            "In which article does the disease {entity} appear?",
+            "What is the PMID for the paper focusing on {entity}?",
+            "Which scientific article investigates {entity}?",
+            "Provide the PubMed ID of research concerning {entity}.",
         ]
     },
     "mutation": {
@@ -34,20 +40,26 @@ TEMPLATES = {
             "What publication describes the mutation {entity}?",
             "Which paper mentions the variant {entity}?",
             "Give the PubMed ID of a study discussing the mutation {entity}.",
-            "In which article does the mutation {entity} appear?"
+            "In which article does the mutation {entity} appear?",
+            "What is the PMID for the paper about the mutation {entity}?",
+            "Which scientific article reports on {entity}?",
+            "Provide the PubMed ID of a study that examines the mutation {entity}.",
         ]
     }
 }
 
 
 def generate_queries(triplets: Set[Triplet], entity_type: str = "gene",
-                     limit: int = 100) -> Dict[str, List[Dict]]:
+                     limit: int = 100, augment: bool = False) -> Dict[str, List[Dict]]:
     """
-    Генерирует direct, inverse и несколько paraphrase запросов на каждый факт.
-    Возвращает словарь с ключами 'direct', 'inverse', 'paraphrase'.
+    Генерирует direct, inverse и paraphrase запросы.
+    Если augment=True, используется расширенный набор парафраз (7 вместо 4).
     """
     tmpl = TEMPLATES.get(entity_type, TEMPLATES["gene"])
     queries = {'direct': [], 'inverse': [], 'paraphrase': []}
+
+    # Определяем количество парафраз в зависимости от флага
+    paraphrase_templates = tmpl["paraphrase"] if augment else tmpl["paraphrase"][:4]
 
     for subj, pred, obj in list(triplets)[:limit]:
         if pred == "mentioned in":
@@ -63,10 +75,9 @@ def generate_queries(triplets: Set[Triplet], entity_type: str = "gene",
                 "expected": subj,
                 "triplet": (subj, pred, obj)
             })
-            # несколько парафраз (по одному вопросу на каждый вариант)
-            for paraphrase_template in tmpl["paraphrase"]:
+            for pt in paraphrase_templates:
                 queries['paraphrase'].append({
-                    "question": paraphrase_template.format(entity=subj),
+                    "question": pt.format(entity=subj),
                     "expected": obj,
                     "triplet": (subj, pred, obj)
                 })
@@ -76,26 +87,29 @@ def generate_queries(triplets: Set[Triplet], entity_type: str = "gene",
                 "expected": obj,
                 "triplet": (subj, pred, obj)
             })
-            # парафразы для ко-оккуренции (2 варианта)
-            queries['paraphrase'].append({
-                "question": f"What {entity_type} is co-mentioned with {subj} in the same article?",
-                "expected": obj,
-                "triplet": (subj, pred, obj)
-            })
-            queries['paraphrase'].append({
-                "question": f"Which {entity_type} appears together with {subj} in a PubMed article?",
-                "expected": obj,
-                "triplet": (subj, pred, obj)
-            })
+            # Ко-оккуренционные парафразы (тоже зависят от augment)
+            cooccur_templates = [
+                f"What {entity_type} is co-mentioned with {subj} in the same article?",
+                f"Which {entity_type} appears together with {subj} in a PubMed article?",
+                f"Name a {entity_type} that co-occurs with {subj} in a publication.",
+                f"With which {entity_type} does {subj} share a PubMed article?",
+            ]
+            if augment:
+                cooccur_templates += [
+                    f"Identify a {entity_type} that is mentioned alongside {subj} in a paper.",
+                    f"List a {entity_type} that co-appears with {subj} in PubMed.",
+                ]
+            for pt in cooccur_templates:
+                queries['paraphrase'].append({
+                    "question": pt,
+                    "expected": obj,
+                    "triplet": (subj, pred, obj)
+                })
 
     return queries
 
 
 def generate_locality_queries() -> List[Dict[str, str]]:
-    """
-    Создаёт набор простых общих вопросов для проверки сохранения знаний (locality).
-    Возвращает список словарей с ключами 'question', 'expected'.
-    """
     common_knowledge = [
         {"question": "What is the capital of France?", "expected": "Paris"},
         {"question": "Who wrote the play 'Romeo and Juliet'?", "expected": "William Shakespeare"},

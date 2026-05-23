@@ -71,7 +71,8 @@ def main():
 
     # 6. Генерация тестовых запросов
     print("\n>>> Этап 5: Генерация тестовых запросов...")
-    test_queries = generate_queries(triplets, entity_type=ds_config['entity_type'])
+    test_queries = generate_queries(triplets, entity_type=ds_config['entity_type'],
+                                augment=config.AUGMENT_PARAPHRASES)
     for key in test_queries:
         print(f"    {key}: {len(test_queries[key])} шт.")
 

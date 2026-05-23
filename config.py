@@ -82,6 +82,11 @@ PROBING_DIR_LORA = BASE_DIR / "data" / "probing_results_lora"   # <-- новая
 PROBING_OUTPUT_FILENAME_TEMPLATE = "{model_short}_{dataset}_{version}_probing_results.json"
 
 # ========================
+# АУГМЕНТАЦИЯ ПАРАФРАЗ
+# ========================
+AUGMENT_PARAPHRASES = False   # True – генерировать расширенный набор парафраз (7 вместо 4)
+
+# ========================
 # ЛОГИРОВАНИЕ
 # ========================
 VERBOSE = True
