@@ -1,0 +1,19 @@
+experiment:
+  name: full_pipeline_v1
+  model: Qwen/Qwen2.5-0.5B-Instruct
+  datasets:
+    - gene
+    - disease
+    - mutation
+  methods:
+    - lora_sft
+    - locft_bf_aug
+    - rome
+  steps:
+    - prepare_data
+    - baseline_probe
+    - train_edit_method
+    - post_edit_probe
+    - aggregate_results
+  version: null
+  probe_after_train: false

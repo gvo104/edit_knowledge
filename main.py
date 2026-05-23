@@ -233,6 +233,17 @@ def run_debug_matrix():
 
 def main():
     parser = argparse.ArgumentParser(description="Edit Knowledge Pipeline")
+    parser.add_argument('--step', type=str, default=None,
+                        choices=['prepare_data', 'baseline_probe', 'train_edit_method', 'post_edit_probe', 'aggregate_results'],
+                        help='Новый модульный запуск одного шага pipeline')
+    parser.add_argument('--method', type=str, default='lora_sft',
+                        help='Метод редактирования для --step train_edit_method/post_edit_probe')
+    parser.add_argument('--model', type=str, default=None,
+                        help='Имя модели для модульного pipeline (по умолчанию из config)')
+    parser.add_argument('--lora_path', type=str, default=None,
+                        help='Путь к LoRA-адаптеру для --step post_edit_probe')
+    parser.add_argument('--probe_after', action='store_true',
+                        help='Для --step train_edit_method: запустить probing после обучения')
     parser.add_argument('--debug', action='store_true',
                         help='Запустить в режиме отладки согласно матрице DEBUG_MATRIX')
     parser.add_argument('--dataset', type=str, default=None,
@@ -243,6 +254,33 @@ def main():
     parser.add_argument('--skip_probing', action='store_true')
     parser.add_argument('--version', type=str, default=None)
     args = parser.parse_args()
+
+    # Новый модульный режим: thin-wrapper над src.experiments.pipeline
+    if args.step:
+        from src.experiments.pipeline import ExperimentPipeline
+
+        dataset = args.dataset or config.DATASET_NAME
+        model = args.model or config.MODEL_NAME
+        pipeline = ExperimentPipeline(
+            dataset_name=dataset,
+            model_name=model,
+            method_name=args.method,
+            output_root=Path(config.BASE_DIR) / "outputs",
+        )
+
+        if args.step == 'prepare_data':
+            pipeline.run_prepare_data()
+        elif args.step == 'baseline_probe':
+            pipeline.run_baseline_probe(version=args.version)
+        elif args.step == 'train_edit_method':
+            pipeline.run_train_edit_method(version=args.version, probe_after=args.probe_after)
+        elif args.step == 'post_edit_probe':
+            if not args.lora_path:
+                raise ValueError("--lora_path обязателен для --step post_edit_probe")
+            pipeline.run_post_edit_probe(lora_path=args.lora_path, version=args.version)
+        elif args.step == 'aggregate_results':
+            pipeline.run_aggregate_results()
+        return
 
     if args.debug:
         print("=" * 60)
