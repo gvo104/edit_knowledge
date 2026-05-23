@@ -9,7 +9,6 @@ from src.editing.rome import RomeMethod
 from src.editing.memit import MemitMethod
 from src.editing.mend import MendMethod
 from src.editing.wise import WiseMethod
-from src.editing.model_merging import ModelMergingMethod
 
 
 def bootstrap_registries() -> None:
@@ -35,13 +34,12 @@ def bootstrap_registries() -> None:
         )
 
     method_map = {
-        "lora_sft": LoraSFTMethod,
+        "locft_bf": LoraSFTMethod,
         "locft_bf_aug": LocFTBFAugMethod,
         "rome": RomeMethod,
         "memit": MemitMethod,
         "mend": MendMethod,
         "wise": WiseMethod,
-        "model_merging": ModelMergingMethod,
     }
     for method_name, method_cls in method_map.items():
         if not global_registries.methods.has(method_name):
@@ -58,6 +56,6 @@ def get_default_run_config() -> Dict[str, str]:
     return {
         "dataset": config.DATASET_NAME,
         "model": config.MODEL_NAME,
-        "method": "lora_sft",
+        "method": "locft_bf",
         "metric": config.EVALUATION_STRATEGY,
     }

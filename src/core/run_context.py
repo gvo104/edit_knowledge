@@ -8,6 +8,7 @@ from uuid import uuid4
 
 @dataclass
 class RunContext:
+    experiment_name: str
     run_id: str
     timestamp: str
     dataset_name: str
@@ -21,6 +22,7 @@ class RunContext:
     @classmethod
     def create(
         cls,
+        experiment_name: str,
         dataset_name: str,
         model_name: str,
         method_name: str,
@@ -32,6 +34,7 @@ class RunContext:
         ts = timestamp or datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         rid = run_id or f"{ts}_{uuid4().hex[:8]}"
         return cls(
+            experiment_name=experiment_name,
             run_id=rid,
             timestamp=ts,
             dataset_name=dataset_name,

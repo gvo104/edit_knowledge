@@ -6,14 +6,11 @@ experiment:
     - disease
     - mutation
   methods:
-    - lora_sft
+    - locft_bf
     - locft_bf_aug
     - rome
-  steps:
-    - prepare_data
-    - baseline_probe
-    - train_edit_method
-    - post_edit_probe
-    - aggregate_results
-  version: null
-  probe_after_train: false
+  sample_size: 50
+  batch_size: 16
+  max_new_tokens: 30
+  evaluation_strategy: improved
+  verbose: true
